@@ -1,0 +1,12 @@
+import 'package:flutter/cupertino.dart';
+import 'package:flutter_screenutil/flutter_screenutil.dart';
+
+import '../global/app_text_style.dart';
+
+Widget appbarTitle({required String text, double? fontSize, FontWeight? fontWeight}){
+  return AppTextStyle(
+    text: text,
+    fontSize: fontSize ?? 16.sp,
+    fontWeight: fontWeight ?? FontWeight.w600,
+  );
+}

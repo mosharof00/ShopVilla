@@ -1,0 +1,380 @@
+import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:flutter_svg/flutter_svg.dart';
+import 'package:get/get.dart';
+import 'package:pull_to_refresh/pull_to_refresh.dart';
+import 'package:shop_villa/app/models/order%20place/user_orderlist_post_model.dart';
+import 'package:shop_villa/app/modules/my_order/controllers/my_order_controller.dart';
+import 'package:shop_villa/app/modules/my_order/widgets/product_labels.dart';
+import 'package:shop_villa/global/cached_network_image_builder.dart';
+import 'package:shop_villa/global/sizedbox_extension.dart';
+import 'package:shop_villa/helper/log_printer.dart';
+import '../../../../gen/assets.gen.dart';
+import '../../../../gen/colors.gen.dart';
+import '../../../../global/app_text_style.dart';
+import '../../../../global/app_text_style_over_flow.dart';
+import '../../../../global/bottomSheet/cancel_order_bottom_sheet.dart';
+import '../../../../global/bottomSheet/success_bottom_sheet.dart';
+import '../../../../global/global_button.dart';
+import '../../../../global/loading_animation_widget.dart';
+import '../../../../global/methods/get_currency.dart';
+import '../../../../global/parse_dateAndTime.dart';
+import '../../../routes/app_pages.dart';
+
+class ActiveOrders extends GetView<MyOrderController> {
+  const ActiveOrders({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    Get.put(MyOrderController());
+    return Obx(() => controller.isLoadingActiveOrderList.value
+        ? loadingAnimationWidget()
+        : controller.activeOrderList.isEmpty
+            ? _buildEmptyState()
+            : _buildOrderList());
+  }
+
+  Widget _buildEmptyState() {
+    return ListView(
+      children: [
+        Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              60.height,
+              ClipRRect(
+                borderRadius: BorderRadius.circular(50.r),
+                child: SvgPicture.asset(
+                  Assets.images.noorder,
+                  height: 250.h,
+                  width: Get.width,
+                ),
+              ),
+              10.height,
+              AppTextStyle(
+                text: "No Order Placed!",
+                color: ColorName.black,
+                fontSize: 16.sp,
+                fontWeight: FontWeight.w500,
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+
+  Widget _buildOrderList() {
+    return Obx(() {
+      return SmartRefresher(
+          controller: controller.refreshControllerActive,
+          enablePullUp: true,
+          onRefresh: () async {
+            try{
+              await controller.getActiveOrderList(isRefresh: true);
+            }catch(e){
+              Log.e(e.toString());
+              controller.refreshControllerActive.refreshFailed();
+            }
+          },
+          onLoading: () async {
+            await controller.getActiveOrderList();
+          },
+          header: const WaterDropHeader(
+            waterDropColor: ColorName.primaryColor,
+            idleIcon: Icon(Icons.autorenew_rounded, color: ColorName.white, size: 20,),
+          ),
+          footer: CustomFooter(
+            builder: (BuildContext? context, LoadStatus? mode) {
+              Widget body;
+              if (mode == LoadStatus.idle) {
+                body = const Text("Pull up load");
+              } else if (mode == LoadStatus.loading) {
+                body = const CupertinoActivityIndicator();
+              } else if (mode == LoadStatus.failed) {
+                body = const Text("Load Failed!Click retry!");
+              } else if (mode == LoadStatus.canLoading) {
+                body = const Text("release to load more");
+              } else {
+                body = const Text("No more Order");
+              }
+              return SizedBox(
+                height: 55.0,
+                child: Center(child: body),
+              );
+            },
+          ),
+          child: ListView.builder(
+            itemCount: controller.activeOrderList.length,
+            itemBuilder: (context, index) {
+              final myOrder = controller.activeOrderList[index];
+              return GestureDetector(
+                onTap: (){
+                  Get.toNamed(Routes.ORDER_DETAILS, arguments: {'arg1': myOrder});
+                },
+                child: Padding(
+                  padding: const EdgeInsets.all(8.0),
+                  child: Material(
+                    elevation: 3,
+                    borderRadius: BorderRadius.circular(15.r),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(15.r),
+                        color: ColorName.white,
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(8.0),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.start,
+                          children: [
+                            _buildOrderHeader(myOrder, index),
+                            5.height,
+                            Divider(color: Colors.pink.shade100),
+                            10.height,
+                            _buildOrderDetails(myOrder),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+      );
+    });
+  }
+
+  Widget _buildOrderHeader(MyOrder myOrder, int index) {
+    return Row(
+      children: [
+        const Icon(Icons.shopping_bag, color: Colors.green),
+        10.width,
+        AppTextStyle(
+          text: DateTimeUtils.parseDate(myOrder.orderDate!.toString()),
+          fontSize: 14.sp,
+          fontWeight: FontWeight.w600,
+        ),
+        10.width,
+        const Spacer(),
+        ProductLabels(
+          text: myOrder.status!.capitalize!,
+        ),
+        _buildPopupMenu(myOrder, index),
+      ],
+    );
+  }
+
+  Widget _buildPopupMenu(MyOrder myOrder, int index) {
+    return Visibility(
+      visible: myOrder.status == MyOrderController.statusPending,
+      child: PopupMenuButton(
+        surfaceTintColor: Colors.white,
+        itemBuilder: (context) => [
+          PopupMenuItem(
+            child: Row(
+              children: [
+                SvgPicture.asset(Assets.icons.forbiddenIcon,
+                    height: 18.h, width: 18.w),
+                5.width,
+                AppTextStyle(
+                  text: "Cancel Order",
+                  fontSize: 15.sp,
+                  fontWeight: FontWeight.w500,
+                ),
+              ],
+            ),
+            onTap: () => _showCancelOrderBottomSheet(myOrder, index),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showCancelOrderBottomSheet(MyOrder myOrder, int index) {
+    cancelReasonBottomSheet(
+      context: Get.context!,
+      okOnTap: () {
+        Get.back();
+        cancelOrderBottomSheet(
+          context: Get.context!,
+          yesOnTap: () {
+            Get.back();
+            controller.cancelOrder(
+                invoiceID: myOrder.invoiceId.toString(), index: index);
+            successBottomSheet(context: Get.context!);
+          },
+          noOnTap: () => Get.back(),
+        );
+      },
+      noOnTap: () => Get.back(),
+    );
+  }
+
+  Widget _buildOrderDetails(MyOrder myOrder) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildProductImages(myOrder),
+        5.width,
+        _buildOrderInfo(myOrder),
+      ],
+    );
+  }
+
+  Widget _buildProductImages(MyOrder myOrder) {
+    return Stack(
+      children: [
+        SizedBox(
+          height: 190.h,
+          width: 175.w,
+          child: Stack(
+            children: List.generate(myOrder.orderproducts!.length > 3 ? 3 : myOrder.orderproducts!.length, (index) {
+              return _buildProductImage(myOrder, index);
+            }),
+          ),
+        ),
+        Positioned(
+          top: 0.h,
+          left: 0.w,
+          child: Container(
+            height: 20.h,
+            width: 20.w,
+            decoration: const BoxDecoration(
+              shape: BoxShape.circle,
+              color: ColorName.primaryColor,
+            ),
+            child: Center(
+              child: AppTextStyle(
+                text: myOrder.orderproducts!.length.toString(),
+                color: ColorName.white,
+              ),
+            ),
+          ),
+        ),
+        Positioned(
+          top: 0.h,
+          right: myOrder.orderproducts!.length > 3 ? 8.w : 20.w,
+          child: Center(
+            child: ProductLabels(
+              width: 50,
+              text: myOrder.total != myOrder.paidAmount ? 'Due' : 'Paid'
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildProductImage(MyOrder myOrder, int index) {
+    if (index == 0) {
+      // First image is the background image
+      return Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(15.r),
+          border: Border.all(color: ColorName.white)
+        ),
+        child: cachedImageHelper(
+          imgurl: myOrder.orderproducts![index].productvariation!.image!,
+          imgHeight: 180.h,
+          imgWidth: 158.w,
+        ),
+      );
+    } else {
+      // Other images are overlayed on top of the background image
+      return Positioned(
+        top: 0.h,
+        left: index * 5.h,
+        // Increase left position by 5.h for each image
+        child: Container(
+          decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(15.r),
+              border: Border.all(color: ColorName.white)
+          ),
+          child: cachedImageHelper(
+            imgurl: myOrder.orderproducts![index].productvariation!.image!,
+            imgHeight: 180.h,
+            imgWidth: 158.w,
+          ),
+        ),
+      );
+    }
+  }
+
+  Widget _buildOrderInfo(MyOrder myOrder) {
+    return Expanded(
+      flex: 1,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          AppTextStyle(
+            text: 'InvoiceID: ',
+            maxLines: 3,
+            fontSize: 13.sp,
+          ),
+          AppTextStyleOverFlow(
+            text: myOrder.invoiceId.toString(),
+            maxLines: 1,
+            fontWeight: FontWeight.w600,
+            textAlign:  TextAlign.start,
+            fontSize: 14.sp,
+          ),
+          5.height,
+          AppTextStyle(
+            text: 'City : ${myOrder.city}',
+            textAlign:  TextAlign.start,
+            fontSize: 13.sp,
+          ),
+          5.height,
+          AppTextStyleOverFlow(
+            text: 'Address : ${myOrder.address}',
+            maxLines: 1,
+            textAlign:  TextAlign.start,
+            fontSize: 13.sp,
+          ),
+          5.height,
+          AppTextStyle(
+            text: 'Phone : ${myOrder.phone}',
+            fontSize: 13.sp,
+            textAlign:  TextAlign.start,
+
+          ),
+          5.height,
+          AppTextStyle(
+            text:
+            GetCurrency.concatWithCurrency(
+              myOrder.total.toString(),
+              GetCurrency.currencySymbol,
+            ),
+            fontSize: 16.sp,
+            fontWeight: FontWeight.w700,
+          ),
+          10.height,
+          Align(
+            alignment: Alignment.centerRight,
+            child: globalButton(
+              onTap: () {
+                Get.toNamed(
+                  Routes.ORDER_DETAILS,
+                  arguments: {'arg1': myOrder},
+                );
+              },
+              text: 'Track Order',
+              width: 110.w,
+              blurRadius: 1,
+              shadowColor: Colors.transparent,
+              fontSize: 11.sp,
+              height: 30,
+            ),
+          ),
+          10.height,
+        ],
+      ),
+    );
+  }
+}

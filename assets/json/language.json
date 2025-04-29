@@ -1,0 +1,38 @@
+{"data":[
+  {
+    "name": "English(US)",
+    "flagURL": "assets/flag/usa_flag.svg",
+    "language": "English",
+    "keys": "en_US"
+  },
+  {
+    "name": "Bengali",
+    "flagURL": "assets/flag/bd_flag.svg",
+    "language": "বাংলা",
+    "keys": "bn_BD"
+  },
+  {
+    "name": "Hindi",
+    "flagURL": "assets/flag/india_flag.svg",
+    "language": "नमस्ते दुनिया",
+    "keys": "hi_IN"
+  },
+  {
+    "name": "Arabic",
+    "flagURL": "assets/flag/arabic_flag.svg",
+    "language": "ہیلو",
+    "keys": "ar_AR"
+  },
+  {
+    "name": "Portuguese",
+    "flagURL": "assets/flag/portugal_flag.svg",
+    "language": "Olá Mundo",
+    "keys": "pt_PT"
+  },
+  {
+    "name": "France",
+    "flagURL": "assets/flag/french_flag.svg",
+    "language": "Bonjour",
+    "keys": "fr_FR"
+  }
+]}
